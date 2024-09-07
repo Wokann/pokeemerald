@@ -296,6 +296,12 @@ $(FONTGFXDIR)/frlg_male.fwjpnfont: $(FONTGFXDIR)/japanese_frlg_male.png
 $(FONTGFXDIR)/frlg_female.fwjpnfont: $(FONTGFXDIR)/japanese_frlg_female.png
 	$(GFX) $< $@
 
+$(FONTGFXDIR)/chinese_small.latfont: $(FONTGFXDIR)/chinese_small.png
+	$(GFX) $< $@
+
+$(FONTGFXDIR)/chinese_normal.latfont: $(FONTGFXDIR)/chinese_normal.png
+	$(GFX) $< $@
+
 
 ### Miscellaneous ###
 graphics/title_screen/pokemon_logo.gbapal: %.gbapal: %.pal
