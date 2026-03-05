@@ -91,6 +91,12 @@ void SetContinueGameWarpToDynamicWarp(int unused);
 const struct MapConnection *GetMapConnection(u8 dir);
 bool8 SetDiveWarpEmerge(u16 x, u16 y);
 bool8 SetDiveWarpDive(u16 x, u16 y);
+
+#if REVISION >= 0xA
+void ClearFieldCallback(void);
+#endif
+
+
 void LoadMapFromCameraTransition(u8 mapGroup, u8 mapNum);
 void ResetInitialPlayerAvatarState(void);
 void StoreInitialPlayerAvatarState(void);

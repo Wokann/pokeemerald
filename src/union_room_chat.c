@@ -26,6 +26,7 @@
 #include "window.h"
 #include "constants/rgb.h"
 #include "constants/songs.h"
+#include "sloopsvc.h"
 
 enum
 {
@@ -1401,6 +1402,9 @@ static void Chat_SendMessage(void)
     switch (sChat->funcState)
     {
     case 0:
+#if REVISION >= 0xA
+        svc_BadWordCheck(sChat->messageEntryBuffer);
+#endif
         if (!gReceivedRemoteLinkPlayers)
         {
             SetChatFunction(CHAT_FUNC_HANDLE_INPUT);
@@ -1752,6 +1756,9 @@ static void RegisterTextAtRow(void)
 {
     u8 *src = GetLimitedMessageStartPtr();
     StringCopy(sChat->registeredTexts[sChat->currentRow], src);
+#if REVISION >= 0xA
+    svc_BadWordCheck(sChat->registeredTexts[sChat->currentRow]);
+#endif
     sChat->changedRegisteredTexts = TRUE;
 }
 

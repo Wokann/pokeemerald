@@ -18,6 +18,12 @@
 #include "save.h"
 #include "mystery_gift_menu.h"
 
+#include "sloopsvc.h"
+#include "m4a.h"
+#include "gba/m4a_internal.h"
+#include "reload_save.h"
+#include "sound.h"
+
 enum {
     RFUSTATE_INIT,
     RFUSTATE_INIT_END,
@@ -89,6 +95,11 @@ EWRAM_DATA u8 gHostRfuUsername[RFU_USER_NAME_LENGTH] = {};
 static EWRAM_DATA INIT_PARAM sRfuReqConfig = {};
 static EWRAM_DATA struct RfuDebug sRfuDebug = {};
 
+#if REVISION >= 0xA
+u16 ReadU16(const void* ptr);
+#else
+static u16 ReadU16(const void *ptr);
+#endif
 static void ResetSendDataManager(struct RfuBlockSend *);
 static void InitChildRecvBuffers(void);
 static void InitParentSendData(void);
@@ -106,7 +117,6 @@ static void SendNextBlock(void);
 static void SendLastBlock(void);
 static u8 GetPartnerIndexByNameAndTrainerID(const u8 *, u16);
 static void UpdateChildStatuses(void);
-static s32 GetJoinGroupStatus(void);
 static void ClearSelectedLinkPlayerIds(u16);
 static void ValidateAndReceivePokemonSioInfo(void *);
 static void ParentResetChildRecvMetadata(s32);
@@ -127,8 +137,13 @@ static const INIT_PARAM sRfuReqConfigTemplate = {
     .userName = gHostRfuUsername,
     .fastSearchParent_flag = TRUE,
     .linkRecovery_enable = FALSE,
+#if REVISION >= 0xA
+    .linkRecovery_period = 720,
+    .NI_failCounter_limit = 480
+#else
     .linkRecovery_period = 600,
     .NI_failCounter_limit = 300
+#endif
 };
 
 static const u8 sAvailSlots[] = {
@@ -351,7 +366,11 @@ static void Task_ParentSearchForChildren(u8 taskId)
     case RFUSTATE_INIT_END:
         break;
     case RFUSTATE_PARENT_CONNECT:
+#if REVISION >= 0xA
+        rfu_LMAN_establishConnection(gRfu.parentChild, 0, 360, (u16 *)sAcceptedSerialNos);
+#else
         rfu_LMAN_establishConnection(gRfu.parentChild, 0, 240, (u16 *)sAcceptedSerialNos);
+#endif
         gRfu.state = RFUSTATE_PARENT_CONNECT_END;
         gTasks[taskId].data[1] = 6;
         break;
@@ -438,7 +457,11 @@ static void Task_ChildSearchForParent(u8 taskId)
     case RFUSTATE_INIT_END:
         break;
     case RFUSTATE_CHILD_CONNECT:
+#if REVISION >= 0xA
+        rfu_LMAN_establishConnection(gRfu.parentChild, 0, 360, (u16 *)sAcceptedSerialNos);
+#else
         rfu_LMAN_establishConnection(gRfu.parentChild, 0, 240, (u16 *)sAcceptedSerialNos);
+#endif
         gRfu.state = RFUSTATE_CHILD_CONNECT_END;
         gTasks[taskId].data[1] = 7;
         break;
@@ -525,7 +548,11 @@ static void Task_UnionRoomListen(u8 taskId)
     case RFUSTATE_INIT_END:
         break;
     case RFUSTATE_UR_CONNECT:
+#if REVISION >= 0xA
+        rfu_LMAN_establishConnection(MODE_P_C_SWITCH, 0, 360, (u16 *)sAcceptedSerialNos);
+#else
         rfu_LMAN_establishConnection(MODE_P_C_SWITCH, 0, 240, (u16 *)sAcceptedSerialNos);
+#endif
         rfu_LMAN_setMSCCallback(MSCCallback_Child);
         gRfu.state = RFUSTATE_UR_CONNECT_END;
         break;
@@ -566,13 +593,25 @@ static void Task_UnionRoomListen(u8 taskId)
 
 void LinkRfu_CreateConnectionAsParent(void)
 {
+#if REVISION >= 0xA
+    rfu_LMAN_establishConnection(MODE_PARENT, 0, 360, (u16 *)sAcceptedSerialNos);
+#else
     rfu_LMAN_establishConnection(MODE_PARENT, 0, 240, (u16 *)sAcceptedSerialNos);
+#endif
 }
 
 void LinkRfu_StopManagerBeforeEnteringChat(void)
 {
     rfu_LMAN_stopManager(FALSE);
 }
+
+#if REVISION >= 0xA
+void LinkRfu_ForceChangeSpParent(void)
+{
+    if (gRfu.parentId != 0) return;
+    rfu_LMAN_forceChangeSP(FALSE);
+}
+#endif
 
 // Argument is provided by the RFU and is unused.
 static void MSCCallback_Child(u16 REQ_commandID)
@@ -607,6 +646,9 @@ void LinkRfu_Shutdown(void)
     u8 i;
 
     rfu_LMAN_powerDownRFU();
+#if REVISION >= 0xA
+    svc_44();
+#endif
     if (gRfu.parentChild == MODE_PARENT)
     {
         // Stop parent searching for children
@@ -658,7 +700,11 @@ static bool8 CanTryReconnectParent(void)
 
 static bool32 TryReconnectParent(void)
 {
+#if REVISION >= 0xA
+    if (gRfu.state == RFUSTATE_CHILD_CONNECT_END && !rfu_LMAN_CHILD_connectParent(gRfuLinkStatus->partner[gRfu.reconnectParentId].id, 360))
+#else
     if (gRfu.state == RFUSTATE_CHILD_CONNECT_END && !rfu_LMAN_CHILD_connectParent(gRfuLinkStatus->partner[gRfu.reconnectParentId].id, 240))
+#endif
     {
         gRfu.state = RFUSTATE_RECONNECTED;
         return TRUE;
@@ -850,14 +896,25 @@ static bool32 RfuMain2_Parent(void)
                 {
                     if (gRfu.childRecvBuffer[i][1])
                     {
+#if REVISION >= 0xA
+                        u8* childRecvBuffer = gRfu.childRecvBuffer[i];
+                        u8 newChildRecvId = childRecvBuffer[0] / 32;
+                        u8* oldChildRecvId = &gRfu.childRecvIds[i];
+                        if (*oldChildRecvId != 0xFF && newChildRecvId != ((*oldChildRecvId + 1) & 7))
+#else
                         if (gRfu.childRecvIds[i] != 0xFF && (gRfu.childRecvBuffer[i][0] >> 5) != ((gRfu.childRecvIds[i] + 1) & 7))
+#endif
                         {
                             if (++gRfu.numChildRecvErrors[i] > 4)
                                 RfuSetErrorParams(F_RFU_ERROR_8 | F_RFU_ERROR_1);
                         }
                         else
                         {
+#if REVISION >= 0xA
+                            gRfu.childRecvIds[i] = newChildRecvId;
+#else
                             gRfu.childRecvIds[i] = gRfu.childRecvBuffer[i][0] / 32;
+#endif
                             gRfu.numChildRecvErrors[i] = 0;
                             gRfu.childRecvBuffer[i][0] &= 0x1f;
                             r0 = gRfu.linkPlayerIdx[i];
@@ -1410,6 +1467,9 @@ static void TryDisconnectRfu(void)
     {
         rfu_LMAN_requestChangeAgbClockMaster();
         gRfu.disconnectMode = RFU_DISCONNECT_NORMAL;
+#if REVISION >= 0xA
+        svc_44();
+#endif
     }
     else
     {
@@ -1422,6 +1482,9 @@ void LinkRfu_FatalError(void)
     rfu_LMAN_requestChangeAgbClockMaster();
     gRfu.disconnectMode = RFU_DISCONNECT_ERROR;
     gRfu.disconnectSlots = gRfuLinkStatus->connSlotFlag | gRfuLinkStatus->linkLossSlotFlag;
+#if REVISION >= 0xA
+    svc_44();
+#endif
 }
 
 // RFU equivalent of LinkCB_WaitCloseLink
@@ -1575,7 +1638,11 @@ u8 Rfu_SetLinkRecovery(bool32 enable)
 {
     if (enable == FALSE)
         return rfu_LMAN_setLinkRecovery(0, 0);
+#if REVISION >= 0xA
+    rfu_LMAN_setLinkRecovery(1, 720);
+#else
     rfu_LMAN_setLinkRecovery(1, 600);
+#endif
     return 0;
 }
 
@@ -1616,8 +1683,11 @@ static bool8 CheckForLeavingGroupMembers(void)
     bool8 memberLeft = FALSE;
     for (i = 0; i < RFU_CHILD_MAX; i++)
     {
+#if REVISION >= 0xA
+#else
         if (gRfu.partnerSendStatuses[i] < RFU_STATUS_JOIN_GROUP_OK
          || gRfu.partnerSendStatuses[i] > RFU_STATUS_JOIN_GROUP_NO)
+#endif
         {
             if (gRfuSlotStatusNI[i]->recv.state == SLOT_STATE_RECV_SUCCESS
              || gRfuSlotStatusNI[i]->recv.state == SLOT_STATE_RECV_SUCCESS_AND_SENDSIDE_UNKNOWN)
@@ -1626,7 +1696,11 @@ static bool8 CheckForLeavingGroupMembers(void)
                 {
                     gRfu.partnerSendStatuses[i] = RFU_STATUS_LEAVE_GROUP;
                     gRfu.partnerRecvStatuses[i] = RFU_STATUS_CHILD_LEAVE_READY;
+#if REVISION >= 0xA
+                    rfu_clearSlot(TYPE_NI_SEND | TYPE_NI_RECV, i);
+#else
                     rfu_clearSlot(TYPE_NI_RECV, i);
+#endif
                     rfu_NI_setSendData(1 << i, 8, &gRfu.partnerSendStatuses[i], 1);
                     memberLeft = TRUE;
                 }
@@ -1654,6 +1728,12 @@ bool32 RfuTryDisconnectLeavingChildren(void)
             childrenLeaving |= (1 << i);
             gRfu.partnerRecvStatuses[i] = RFU_STATUS_OK;
         }
+#if REVISION >= 0xA
+        if (((gRfuLinkStatus->connSlotFlag >> i) & 1) == 0)
+        {
+            gRfu.partnerRecvStatuses[i] = RFU_STATUS_OK;
+        }
+#endif
     }
 
     // Disconnect any leaving children
@@ -1695,6 +1775,9 @@ void SendLeaveGroupNotice(void)
 {
     gRfu.leaveGroupStatus = RFU_STATUS_LEAVE_GROUP_NOTICE;
     rfu_clearSlot(TYPE_NI_SEND, gRfu.childSlot);
+#if REVISION >= 0xA
+    gRfuLinkStatus->remainLLFrameSizeChild[gRfu.childSlot] = 16;
+#endif
     rfu_NI_setSendData(1 << gRfu.childSlot, 8, &gRfu.leaveGroupStatus, 1);
 }
 
@@ -1725,7 +1808,7 @@ static void UpdateChildStatuses(void)
     }
 }
 
-static s32 GetJoinGroupStatus(void)
+s32 GetJoinGroupStatus(void)
 {
     s32 status = RFU_STATUS_OK;
     if (gRfu.leaveGroupStatus == RFU_STATUS_LEAVE_GROUP_NOTICE)
@@ -1823,7 +1906,11 @@ static void Task_PlayerExchange(u8 taskId)
         DestroyTask(taskId);
         gReceivedRemoteLinkPlayers = TRUE;
         gRfu.playerExchangeActive = FALSE;
+#if REVISION >= 0xA
+        rfu_LMAN_setLinkRecovery(1, 720);
+#else
         rfu_LMAN_setLinkRecovery(1, 600);
+#endif
         if (gRfu.newChildQueue)
         {
             for (i = 0; i < RFU_CHILD_MAX; i++)
@@ -2020,6 +2107,12 @@ bool32 RfuMain1(void)
 {
     bool32 retval = FALSE;
     gRfu.parentId = 0;
+#if REVISION >= 0xA
+    if ((svc_4b() & SVC4B_RESEED_RNG) != 0)
+    {
+        SeedRng(ReadU16( & GetHostRfuGameData()->compatibility.playerTrainerId ));
+    }
+#endif
     rfu_LMAN_manager_entity(Random2());
     if (!gRfu.isShuttingDown)
     {
@@ -2530,6 +2623,13 @@ u8 RfuGetStatus(void)
     return gRfu.status;
 }
 
+#if REVISION >= 0xA
+u16 RfuGetErrorInfo(void)
+{
+    return gRfu.errorInfo;
+}
+#endif
+
 bool32 RfuHasErrored(void)
 {
     u32 status = RfuGetStatus();
@@ -2644,15 +2744,23 @@ void InitializeRfuLinkManager_EnterUnionRoom(void)
     rfu_LMAN_initializeManager(LinkManagerCB_UnionRoom, NULL);
     sRfuReqConfig = sRfuReqConfigTemplate;
     sRfuReqConfig.linkRecovery_enable = 0;
+#if REVISION >= 0xA
+    sRfuReqConfig.linkRecovery_period = 720;
+#else
     sRfuReqConfig.linkRecovery_period = 600;
+#endif
     gRfu.searchTaskId = CreateTask(Task_UnionRoomListen, 1);
 }
 
+#if REVISION >= 0xA
+// (what used to be) ReadAsU16 from union_room.c is used instead.
+#else
 static u16 ReadU16(const void *ptr)
 {
     const u8 *ptr_ = ptr;
     return (ptr_[1] << 8) | (ptr_[0]);
 }
+#endif
 
 static u8 GetPartnerIndexByNameAndTrainerID(const u8 *name, u16 id)
 {
@@ -2784,7 +2892,11 @@ static void Task_RfuReconnectWithParent(u8 taskId)
         tTime++;
     }
 
+#if REVISION >= 0xA
+    if (tTime > 360)
+#else
     if (tTime > 240)
+#endif
     {
         // Timeout error
         RfuSetStatus(RFU_STATUS_CONNECTION_ERROR, F_RFU_ERROR_5 | F_RFU_ERROR_6 | F_RFU_ERROR_7);
@@ -2805,6 +2917,13 @@ void CreateTask_RfuReconnectWithParent(const u8 *name, u16 trainerId)
     StringCopy((u8 *)(data), name);
     data[8] = trainerId;
 }
+
+#if REVISION >= 0xA
+void DestroyTask_RfuReconnectWithParent(void)
+{
+    DestroyTask(FindTaskIdByFunc(Task_RfuReconnectWithParent));
+}
+#endif
 
 static bool32 IsPartnerActivityIncompatible(s16 activity, struct RfuGameData *partner)
 {
@@ -2850,7 +2969,11 @@ static void Task_TryConnectToUnionRoomParent(u8 taskId)
     if (gRfu.status == RFU_STATUS_NEW_CHILD_DETECTED)
         DestroyTask(taskId);
 
+#if REVISION >= 0xA
+    if (++gTasks[taskId].tTime > 480)
+#else
     if (++gTasks[taskId].tTime > 300)
+#endif
     {
         // Timeout error
         RfuSetStatus(RFU_STATUS_CONNECTION_ERROR, F_RFU_ERROR_5 | F_RFU_ERROR_6 | F_RFU_ERROR_7);
@@ -2868,7 +2991,11 @@ static void Task_TryConnectToUnionRoomParent(u8 taskId)
             // Parent found, try to connect
             if (!IsPartnerActivityIncompatible(gTasks[taskId].tActivity, (void *)gRfuLinkStatus->partner[id].gname))
             {
+#if REVISION >= 0xA
+                if (gRfuLinkStatus->partner[id].slot != 0xFF && !rfu_LMAN_CHILD_connectParent(gRfuLinkStatus->partner[id].id, 150))
+#else
                 if (gRfuLinkStatus->partner[id].slot != 0xFF && !rfu_LMAN_CHILD_connectParent(gRfuLinkStatus->partner[id].id, 90))
+#endif
                 {
                     // Succesfully connected to parent
                     gRfu.state = RFUSTATE_CONNECTED;
@@ -2893,7 +3020,11 @@ void TryConnectToUnionRoomParent(const u8 *name, struct RfuGameData *parent, u8 
     gRfu.status = RFU_STATUS_OK;
     StringCopy(gRfu.parentName, name);
     memcpy(&gRfu.parent, parent, RFU_GAME_NAME_LENGTH);
+#if REVISION >= 0xA
+    rfu_LMAN_forceChangeSP(TRUE);
+#else
     rfu_LMAN_forceChangeSP();
+#endif
     taskId = CreateTask(Task_TryConnectToUnionRoomParent, 2);
     gTasks[taskId].tActivity = activity;
     listenTaskId = FindTaskIdByFunc(Task_UnionRoomListen);
@@ -3004,6 +3135,26 @@ u32 GetRfuRecvQueueLength(void)
 {
     return gRfu.recvQueue.count;
 }
+
+#if REVISION >= 0xA
+static inline void RfuReloadCommon(void) {
+    m4aMPlayStop(&gMPlayInfo_SE1);
+    m4aMPlayStop(&gMPlayInfo_SE2);
+    m4aMPlayStop(&gMPlayInfo_SE3);
+    StopMapMusic();
+    gMain.callback1 = NULL;
+}
+
+void RfuReloadSave(void) {
+    RfuReloadCommon();
+    ReloadSave();
+}
+
+void RfuSoftReset(void) {
+    RfuReloadCommon();
+    DoSoftReset();
+}
+#endif
 
 static void Task_Idle(u8 taskId)
 {

@@ -273,6 +273,7 @@ void RfuSetErrorParams(u32 errorInfo);
 void RfuSetStatus(u8 status, u16 errorInfo);
 u8 Rfu_SetLinkRecovery(bool32 enable);
 void CopyHostRfuGameDataAndUsername(struct RfuGameData *gameData, u8 *username);
+s32 GetJoinGroupStatus(void);
 void SetHostRfuGameData(u8 activity, u32 partnerInfo, bool32 startedActivity);
 void InitializeRfuLinkManager_LinkLeader(u32 groupMax);
 bool32 IsRfuCommunicatingWithAllChildren(void);
@@ -309,6 +310,18 @@ s32 Rfu_GetIndexOfNewestChild(u8 bits);
 void CreateTask_RfuIdle(void);
 void DestroyTask_RfuIdle(void);
 void ClearRecvCommands(void);
+
+void PkmnStrToASCII(u8 *dest, const u8 *src);
+void ASCIIToPkmnStr(u8 *dest, const u8 *src);
+
+#if REVISION >= 0xA
+u16 RfuGetErrorInfo(void);
+void LinkRfu_ForceChangeSpParent(void);
+void DestroyTask_RfuReconnectWithParent(void);
+void RfuReloadSave(void);
+void RfuSoftReset(void);
+#endif
+
 void LinkRfu_FatalError(void);
 bool32 Rfu_IsPlayerExchangeActive(void);
 void Rfu_StopPartnerSearch(void);

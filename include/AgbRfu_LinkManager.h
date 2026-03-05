@@ -23,8 +23,13 @@
 #define PCSWITCH_FORCE_SP_START 0x09
 
 // Period for which parent-child switching search specified
+#if REVISION >= 0xA
+#define PCSWITCH_ALL_PERIOD                                             180             // Entire cycle 180 frames
+#define PCSWITCH_SP_PERIOD                                               65             // Child period 40 frames
+#else
 #define PCSWITCH_ALL_PERIOD                                             180             // Entire cycle 180 frames
 #define PCSWITCH_SP_PERIOD                                               40             // Child period 40 frames
+#endif
 
 // Error code returned by Link Manager API (rfu_LMAN_...return value of function)
 #define LMAN_ERROR_MANAGER_BUSY                                1    // Link Manager is already running.
@@ -170,6 +175,9 @@ typedef struct linkManagerTag
     u16 param[2];                                   // Region where parameters returned when LMAN callback occurs are stored.
     u16 NI_failCounter_limit;                       // Period of failCounter during NI type data transmit/receive (x 16.7 ms) Note: Runs for unlimited time when specifying 0
     u16 connect_period;                             // Count for the period to execute a connection process (x 16.7 ms). Note: Runs for unlimited time when specifying 0.
+#if REVISION >= 0xA
+    u16 connect_period_initial;                     // pushes next offsets up by 2
+#endif
     u16 pcswitch_period_bak;                        // Backup for No. 3 SC period during parent-child switching search.
     u16 work;                                       // Work region used by the link manager.
     u16 *acceptable_serialNo_list;                  // List of game serial numbers that can accept connections. (See Note below)
@@ -200,6 +208,10 @@ u8 rfu_LMAN_setLinkRecovery(u8 enable_flag, u16 recovery_period);
 void rfu_LMAN_manager_entity(u32 rand);
 void rfu_LMAN_syncVBlank(void);
 u8 rfu_LMAN_initializeManager(void (*LMAN_callback_p)(u8, u8), void (*MSC_callback_p)(u16));
+#if REVISION >= 0xA
+void rfu_LMAN_forceChangeSP(bool8 child);
+#else
 void rfu_LMAN_forceChangeSP(void);
+#endif
 
 #endif //GUARD_LINKMANAGER_H

@@ -29,6 +29,7 @@
 #include "main.h"
 #include "constants/event_objects.h"
 #include "constants/rgb.h"
+#include "sloopsvc.h"
 
 enum {
     INPUT_NONE,
@@ -668,7 +669,15 @@ static bool8 MainState_MoveToOKButton(void)
 
 static bool8 MainState_PressedOKButton(void)
 {
+#if REVISION >= 0xA
+    // If the input text matched against the Switch bad words list, do not use it.
+    if (!svc_BadWordCheck(sNamingScreen->textBuffer))
+    {
+        SaveInputText();
+    }
+#else
     SaveInputText();
+#endif
     SetInputState(INPUT_STATE_DISABLED);
     SetCursorFlashing(FALSE);
     TryStartButtonFlash(BUTTON_COUNT, FALSE, TRUE);

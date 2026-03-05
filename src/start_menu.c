@@ -46,6 +46,7 @@
 #include "constants/battle_frontier.h"
 #include "constants/rgb.h"
 #include "constants/songs.h"
+#include "sloopsvc.h"
 
 // Menu actions
 enum
@@ -1302,6 +1303,9 @@ static void Task_SaveAfterLinkBattle(u8 taskId)
             if (WriteSaveBlock1Sector())
             {
                 ClearContinueGameWarpStatus2();
+#if REVISION >= 0xA
+                svc_FinishSave();
+#endif
                 *state = 3;
                 gSoftResetDisabled = FALSE;
             }

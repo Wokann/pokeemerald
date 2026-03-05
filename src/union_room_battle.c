@@ -190,16 +190,32 @@ void CB2_UnionRoomBattle(void)
     case 50:
         if (!UpdatePaletteFade())
         {
+#if REVISION >= 0xA
+#else
             SetLinkStandbyCallback();
+#endif
             gMain.state++;
         }
         break;
     case 51:
         if (IsLinkTaskFinished())
         {
+#if REVISION >= 0xA
+            SetLinkStandbyCallback();
+            gMain.state++;
+#else
+            SetMainCallback2(CB2_SetUpPartiesAndStartBattle);
+#endif
+        }
+        break;
+#if REVISION >= 0xA
+    case 52:
+        if (IsLinkTaskFinished())
+        {
             SetMainCallback2(CB2_SetUpPartiesAndStartBattle);
         }
         break;
+#endif
     case 6:
         if (!gReceivedRemoteLinkPlayers)
         {

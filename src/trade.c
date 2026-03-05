@@ -50,6 +50,7 @@
 #include "constants/rgb.h"
 #include "constants/songs.h"
 #include "constants/union_room.h"
+#include "sloopsvc.h"
 
 // IDs for RunTradeMenuCallback
 enum {
@@ -1734,7 +1735,11 @@ static void CB_HandleTradeCanceled(void)
 
 static void CB_InitExitCanceledTrade(void)
 {
+#if REVISION >= 0xA
+    if (IsLinkTaskFinished() && !gPaletteFade.active)
+#else
     if (!gPaletteFade.active)
+#endif
     {
         if (gWirelessCommType)
             SetLinkStandbyCallback();
@@ -4713,25 +4718,37 @@ static void CB2_SaveAndEndTrade(void)
 
         SetContinueGameWarpStatusToDynamicWarp();
         LinkFullSave_Init();
+#if REVISION >= 0xA
+        // No need to wait for a save when the emulator does it fast and synchronously
+        gMain.state = 52;
+#else
         gMain.state++;
+#endif
         sTradeAnim->timer = 0;
         break;
+#if REVISION >= 0xA
+#else
     case 51:
         if (++sTradeAnim->timer == 5)
             gMain.state++;
         break;
+#endif
     case 52:
         if (LinkFullSave_WriteSector())
         {
             ClearContinueGameWarpStatus2();
             gMain.state = 4;
         }
+#if REVISION >= 0xA
+        // Save delay is gone, just write the next sector if save isn't finished
+#else
         else
         {
             // Save isn't finished, delay again
             sTradeAnim->timer = 0;
             gMain.state = 51;
         }
+#endif
         break;
     case 4:
         LinkFullSave_ReplaceLastSector();
@@ -4759,6 +4776,26 @@ static void CB2_SaveAndEndTrade(void)
             sTradeAnim->timer--;
         }
         break;
+#if REVISION >= 0xA
+    case 42:
+        if (IsLinkTaskFinished())
+        {
+            gMain.state = 43;
+        }
+        break;
+    case 43:
+        SetLinkStandbyCallback();
+        gMain.state = 44;
+        break;
+    case 44:
+        if (IsLinkTaskFinished())
+        {
+            LinkFullSave_SetLastSectorSignature();
+            svc_FinishSave();
+            gMain.state = 5;
+        }
+        break;
+#else
     case 42:
         if (_IsLinkTaskFinished())
         {
@@ -4766,6 +4803,7 @@ static void CB2_SaveAndEndTrade(void)
             gMain.state = 5;
         }
         break;
+#endif
     case 5:
         if (++sTradeAnim->timer > 60)
         {

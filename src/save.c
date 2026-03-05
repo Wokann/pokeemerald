@@ -11,6 +11,7 @@
 #include "trainer_hill.h"
 #include "link.h"
 #include "constants/game_stat.h"
+#include "sloopsvc.h"
 
 static u16 CalculateChecksum(void *, u16);
 static bool8 ReadFlashSector(u8, struct SaveSector *);
@@ -228,6 +229,11 @@ static u8 HandleWriteSectorNBytes(u8 sectorId, u8 *data, u16 size)
 
 static u8 TryWriteSector(u8 sector, u8 *data)
 {
+#if REVISION >= 0xA
+    svc_WriteSector(sector, data);
+    SetDamagedSectorBits(DISABLE, sector);
+    return SAVE_STATUS_OK;
+#else
     if (ProgramFlashSectorAndVerify(sector, data)) // is damaged?
     {
         // Failed
@@ -240,6 +246,7 @@ static u8 TryWriteSector(u8 sector, u8 *data)
         SetDamagedSectorBits(DISABLE, sector);
         return SAVE_STATUS_OK;
     }
+#endif
 }
 
 static u32 RestoreSaveBackupVarsAndIncrement(const struct SaveSectorLocation *locations)
@@ -338,6 +345,11 @@ static u8 HandleReplaceSector(u16 sectorId, const struct SaveSectorLocation *loc
 
     gReadWriteSector->checksum = CalculateChecksum(data, size);
 
+#if REVISION >= 0xA
+    svc_ReplaceSector(sector, (u8*)gReadWriteSector);
+    SetDamagedSectorBits(DISABLE, sector);
+    return SAVE_STATUS_OK;
+#else
     // Erase old save data
     EraseFlashSector(sector);
 
@@ -388,6 +400,7 @@ static u8 HandleReplaceSector(u16 sectorId, const struct SaveSectorLocation *loc
             return SAVE_STATUS_OK;
         }
     }
+#endif
 }
 
 static u8 WriteSectorSignatureByte_NoOffset(u16 sectorId, const struct SaveSectorLocation *locations)
@@ -759,6 +772,9 @@ u8 HandleSavingData(u8 saveType)
         break;
     }
     gTrainerHillVBlankCounter = backupVar;
+#if REVISION >= 0xA
+    svc_FinishSave();
+#endif
     return 0;
 }
 
@@ -986,6 +1002,9 @@ void Task_LinkFullSave(u8 taskId)
         tState = 1;
         break;
     case 1:
+#if REVISION >= 0xA
+        if (!IsLinkTaskFinished()) break;
+#endif
         SetLinkStandbyCallback();
         tState = 2;
         break;
@@ -1021,6 +1040,9 @@ void Task_LinkFullSave(u8 taskId)
         tState = 7;
         break;
     case 7:
+#if REVISION >= 0xA
+        if (!IsLinkTaskFinished()) break;
+#endif
         if (!tInBattleTower)
             ClearContinueGameWarpStatus2();
         SetLinkStandbyCallback();
@@ -1030,10 +1052,16 @@ void Task_LinkFullSave(u8 taskId)
         if (IsLinkTaskFinished())
         {
             LinkFullSave_SetLastSectorSignature();
+#if REVISION >= 0xA
+            svc_FinishSave();
+#endif
             tState = 9;
         }
         break;
     case 9:
+#if REVISION >= 0xA
+        if (!IsLinkTaskFinished()) break;
+#endif
         SetLinkStandbyCallback();
         tState = 10;
         break;

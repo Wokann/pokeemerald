@@ -7,7 +7,11 @@ EWRAM_DATA u8 gStringVar1[0x100] = {0};
 EWRAM_DATA u8 gStringVar2[0x100] = {0};
 EWRAM_DATA u8 gStringVar3[0x100] = {0};
 EWRAM_DATA u8 gStringVar4[0x3E8] = {0};
+#if REVISION >= 0xA
+EWRAM_DATA static u8 sUnknownStringVar[12] = {0};
+#else
 EWRAM_DATA static u8 sUnknownStringVar[16] = {0};
+#endif
 
 static const u8 sDigits[] = __("0123456789ABCDEF");
 

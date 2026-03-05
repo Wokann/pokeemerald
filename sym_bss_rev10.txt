@@ -4,6 +4,8 @@
 	.include "src/gpu_regs.o"
 	.include "src/bg.o"
 	.include "src/text.o"
+	.include "src/librfu_stwi.o"
+	.include "src/librfu_rfu.o"
 	.include "src/sprite.o"
 	.include "src/sloopsvc.o"
 	.include "src/link.o"

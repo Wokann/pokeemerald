@@ -24,6 +24,7 @@
 #include "main.h"
 #include "trainer_hill.h"
 #include "constants/rgb.h"
+#include "sloopsvc.h"
 
 static void VBlankIntr(void);
 static void HBlankIntr(void);
@@ -31,11 +32,23 @@ static void VCountIntr(void);
 static void SerialIntr(void);
 static void IntrDummy(void);
 
+#if REVISION >= 0xA && !MODERN
+const char OtherBuildDateTime[] = "2025 12 19 16:01";
+#endif
+
+#if REVISION >= 0xA
+// OtherBuildDateTime is probably in some other file?
+__attribute__((aligned(4)))
+#endif
 const u8 gGameVersion = GAME_VERSION;
 
 const u8 gGameLanguage = GAME_LANGUAGE; // English
 
+#if REVISION == 0
 const char BuildDateTime[] = "2005 02 21 11:10";
+#elif REVISION == 0xA
+const char BuildDateTime[] = "2025 12 19 15:38 22afedd9";
+#endif //REVISION
 
 const IntrFunc gIntrTableTemplate[] =
 {
@@ -88,12 +101,19 @@ void EnableVCountIntrAtLine150(void);
 
 void AgbMain(void)
 {
+#if REVISION >= 0xA
+    svc_stubbed();
+#endif
     // Modern compilers are liberal with the stack on entry to this function,
     // so RegisterRamReset may crash if it resets IWRAM.
 #if !MODERN
     RegisterRamReset(RESET_ALL);
 #endif //MODERN
+#if REVISION >= 0xA
+    *(vu16 *)BG_PLTT = RGB_BLACK;
+#else
     *(vu16 *)BG_PLTT = RGB_WHITE; // Set the backdrop to white on startup
+#endif
     InitGpuRegManager();
     REG_WAITCNT = WAITCNT_PREFETCH_ENABLE | WAITCNT_WS0_S_1 | WAITCNT_WS0_N_3;
     InitKeys();
@@ -137,7 +157,10 @@ void AgbMain(void)
          && JOY_HELD_RAW(B_START_SELECT) == B_START_SELECT)
         {
             rfu_REQ_stopMode();
+#if REVISION >= 0xA
+#else
             rfu_waitREQComplete();
+#endif
             DoSoftReset();
         }
 
@@ -183,6 +206,9 @@ static void InitMainCallbacks(void)
     SetMainCallback2(CB2_InitCopyrightScreenAfterBootup);
     gSaveBlock2Ptr = &gSaveblock2.block;
     gPokemonStoragePtr = &gPokemonStorage.block;
+#if REVISION >= 0xA
+    svc_SetSaveBlock2(&gSaveblock2.block);
+#endif
 }
 
 static void CallCallbacks(void)

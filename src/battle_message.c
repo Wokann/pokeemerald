@@ -2263,9 +2263,16 @@ static const u8 *TryGetStatusString(u8 *src)
     memcpy(status, sText_EmptyStatus, min(ARRAY_COUNT(status), ARRAY_COUNT(sText_EmptyStatus)));
 
     statusPtr = status;
+#if REVISION >= 0xA
+    for (i = 0; i < ARRAY_COUNT(status) && *src != EOS; i++)
+#else
     for (i = 0; i < ARRAY_COUNT(status); i++)
+#endif
     {
+#if REVISION >= 0xA
+#else
         if (*src == EOS) break; // one line required to match -g
+#endif
         *statusPtr = *src;
         src++;
         statusPtr++;

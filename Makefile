@@ -2,12 +2,17 @@
 TITLE       := POKEMON EMER
 GAME_CODE   := BPEE
 MAKER_CODE  := 01
-REVISION    := 0
+REVISION    := $(GAME_REVISION)
 MODERN      ?= 0
 KEEP_TEMPS  ?= 0
+GAME_REVISION ?= 0
 
 # `File name`.gba ('_modern' will be appended to the modern builds)
+ifeq ($(GAME_REVISION),10)
+FILE_NAME := pokeemerald_switch
+else
 FILE_NAME := pokeemerald
+endif
 BUILD_DIR := build
 
 # Builds the ROM using a modern compiler
@@ -23,7 +28,7 @@ ifeq (compare,$(MAKECMDGOALS))
 endif
 
 # Default make rule
-all: rom
+all: rom syms
 
 # Toolchain selection
 TOOLCHAIN := $(DEVKITARM)
@@ -68,9 +73,9 @@ else
 endif
 
 ROM_NAME := $(FILE_NAME).gba
-OBJ_DIR_NAME := $(BUILD_DIR)/emerald
+OBJ_DIR_NAME := $(BUILD_DIR)/$(subst poke,,$(FILE_NAME))
 MODERN_ROM_NAME := $(FILE_NAME)_modern.gba
-MODERN_OBJ_DIR_NAME := $(BUILD_DIR)/modern
+MODERN_OBJ_DIR_NAME := $(BUILD_DIR)/$(subst poke,,$(FILE_NAME))_modern
 
 ELF_NAME := $(ROM_NAME:.gba=.elf)
 MAP_NAME := $(ROM_NAME:.gba=.map)
@@ -106,14 +111,14 @@ MID_BUILDDIR = $(OBJ_DIR)/$(MID_SUBDIR)
 SHELL := bash -o pipefail
 
 # Set flags for tools
-ASFLAGS := -mcpu=arm7tdmi --defsym MODERN=$(MODERN)
+ASFLAGS := -mcpu=arm7tdmi --defsym MODERN=$(MODERN) --defsym REVISION=$(GAME_REVISION)
 
 INCLUDE_DIRS := include
 INCLUDE_CPP_ARGS := $(INCLUDE_DIRS:%=-iquote %)
 INCLUDE_SCANINC_ARGS := $(INCLUDE_DIRS:%=-I %)
 
 O_LEVEL ?= 2
-CPPFLAGS := $(INCLUDE_CPP_ARGS) -Wno-trigraphs -DMODERN=$(MODERN)
+CPPFLAGS := $(INCLUDE_CPP_ARGS) -Wno-trigraphs -DMODERN=$(MODERN) -DREVISION=$(GAME_REVISION)
 ifeq ($(MODERN),0)
   CPPFLAGS += -I tools/agbcc/include -I tools/agbcc -nostdinc -undef -std=gnu89
   CC1 := tools/agbcc/bin/agbcc$(EXE)
@@ -160,8 +165,10 @@ MAKEFLAGS += --no-print-directory
 # Delete files that weren't built properly
 .DELETE_ON_ERROR:
 
+ALL_BUILDS := emerald emerald_switch emerald_modern
+
 RULES_NO_SCAN += libagbsyscall clean clean-assets tidy tidymodern tidynonmodern generated clean-generated
-.PHONY: all rom modern compare
+.PHONY: all rom modern compare $(ALL_BUILDS) $(ALL_BUILDS:%=compare_%)
 .PHONY: $(RULES_NO_SCAN)
 
 infoshell = $(foreach line, $(shell $1 | sed "s/ /__SPACE__/g"), $(info $(subst __SPACE__, ,$(line))))
@@ -227,10 +234,22 @@ $(shell mkdir -p $(SUBDIRS))
 modern: all
 compare: all
 
+emerald:                ; @$(MAKE) GAME_REVISION=0
+emerald_switch:         ; @$(MAKE) GAME_REVISION=10
+emerald_modern:         ; @$(MAKE) GAME_REVISION=0 MODERN=1
+
+compare_emerald:        ; @$(MAKE) GAME_REVISION=0 COMPARE=1
+compare_emerald_switch: ; @$(MAKE) GAME_REVISION=10 COMPARE=1
+compare_emerald_modern: ; @$(MAKE) GAME_REVISION=0 MODERN=1 COMPARE=1
+
 # Other rules
 rom: $(ROM)
 ifeq ($(COMPARE),1)
-	@$(SHA1) rom.sha1
+  ifeq ($(GAME_REVISION),10)
+	@$(SHA1) pokeemerald_switch.sha1
+  else
+	@$(SHA1) pokeemerald.sha1
+  endif
 endif
 
 syms: $(SYM)
@@ -365,10 +384,24 @@ $(OBJ_DIR)/sym_common.ld: sym_common.txt $(C_OBJS) $(wildcard common_syms/*.txt)
 $(OBJ_DIR)/sym_ewram.ld: sym_ewram.txt
 	$(RAMSCRGEN) ewram_data $< ENGLISH > $@
 
+$(OBJ_DIR)/sym_bss_rev10.ld: sym_bss_rev10.txt
+	$(RAMSCRGEN) .bss $< ENGLISH > $@
+
+$(OBJ_DIR)/sym_common_rev10.ld: sym_common_rev10.txt $(C_OBJS) $(wildcard common_syms/*.txt)
+	$(RAMSCRGEN) COMMON $< ENGLISH -c $(C_BUILDDIR),common_syms > $@
+
+$(OBJ_DIR)/sym_ewram_rev10.ld: sym_ewram_rev10.txt
+	$(RAMSCRGEN) ewram_data $< ENGLISH > $@
+
 # Linker script
 ifeq ($(MODERN),0)
-LD_SCRIPT := ld_script.ld
-LD_SCRIPT_DEPS := $(OBJ_DIR)/sym_bss.ld $(OBJ_DIR)/sym_common.ld $(OBJ_DIR)/sym_ewram.ld
+  ifeq ($(GAME_REVISION),10)
+    LD_SCRIPT := ld_script_rev10.ld
+    LD_SCRIPT_DEPS := $(OBJ_DIR)/sym_bss_rev10.ld $(OBJ_DIR)/sym_common_rev10.ld $(OBJ_DIR)/sym_ewram_rev10.ld
+  else
+    LD_SCRIPT := ld_script.ld
+    LD_SCRIPT_DEPS := $(OBJ_DIR)/sym_bss.ld $(OBJ_DIR)/sym_common.ld $(OBJ_DIR)/sym_ewram.ld
+  endif
 else
 LD_SCRIPT := ld_script_modern.ld
 LD_SCRIPT_DEPS :=

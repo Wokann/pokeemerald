@@ -19,6 +19,7 @@
 #include "constants/songs.h"
 #include "constants/union_room.h"
 #include "constants/rgb.h"
+#include "sloopsvc.h"
 
 enum {
     COLORMODE_NORMAL,
@@ -57,7 +58,7 @@ struct WirelessCommunicationStatusScreen
 static struct WirelessCommunicationStatusScreen *sStatusScreen;
 
 static void CB2_InitWirelessCommunicationScreen(void);
-static void Task_WirelessCommunicationScreen(u8);
+void Task_WirelessCommunicationScreen(u8);
 static void WCSS_AddTextPrinterParameterized(u8, u8, const u8 *, u8, u8, u8);
 static bool32 UpdateCommunicationCounts(u32 *, u32 *, u32 *, u8);
 
@@ -286,7 +287,7 @@ static void PrintHeaderTexts(void)
 
 #define tState data[0]
 
-static void Task_WirelessCommunicationScreen(u8 taskId)
+void Task_WirelessCommunicationScreen(u8 taskId)
 {
     s32 i;
     switch (gTasks[taskId].tState)
@@ -321,7 +322,11 @@ static void Task_WirelessCommunicationScreen(u8 taskId)
             PutWindowTilemap(WIN_GROUP_COUNTS);
             CopyWindowToVram(WIN_GROUP_COUNTS, COPYWIN_FULL);
         }
+#if REVISION >= 0xA
+        if (JOY_NEW(A_BUTTON) || JOY_NEW(B_BUTTON) || svc_53())
+#else
         if (JOY_NEW(A_BUTTON) || JOY_NEW(B_BUTTON))
+#endif
         {
             PlaySE(SE_SELECT);
             gTasks[sStatusScreen->rfuTaskId].data[15] = 0xFF;
@@ -383,6 +388,41 @@ static void WCSS_AddTextPrinterParameterized(u8 windowId, u8 fontId, const u8 *s
 
 static u32 CountPlayersInGroupAndGetActivity(struct RfuPlayer *player, u32 *groupCounts)
 {
+#if REVISION >= 0xA
+    u32 activity = player->rfu.data.activity;
+    if (player->groupScheduledAnim == UNION_ROOM_SPAWN_IN)
+    {
+
+        u32 i = 0;
+        const u8 * group_info = &sActivityGroupInfo[0][0];
+        const u8 * group_players = &group_info[2];
+        const u8 * group_activity = group_info;
+        s32 offset = 0;
+        for (; i < ARRAY_COUNT(sActivityGroupInfo); i++)
+        {
+            const u8 * group_type = &group_info[1];
+            u8 type = ((u8*)offset)[(u32)group_type]; // needed to match, but nobody would write this???
+            if (type < MAX_LINK_PLAYERS && activity == *group_activity)
+            {
+                    u8 k = *group_players;
+                    if (k == 0)
+                    {
+                        s32 j;
+                        for (j = 0; j < RFU_CHILD_MAX; j++)
+                            if (player->rfu.data.partnerInfo[j] != 0) k++;
+                        k++;
+                    }
+                    groupCounts[type] += k;
+                    break;
+            }
+            group_players += sizeof(sActivityGroupInfo[0]);
+            group_activity += sizeof(sActivityGroupInfo[0]);
+            offset += (u8)sizeof(sActivityGroupInfo[0]);
+        }
+
+    }
+    return activity;
+#else
     int i, j, k;
     u32 activity = player->rfu.data.activity;
 
@@ -420,6 +460,7 @@ static u32 CountPlayersInGroupAndGetActivity(struct RfuPlayer *player, u32 *grou
     #undef group_activity
     #undef group_type
     #undef group_players
+#endif
 }
 
 static bool32 HaveCountsChanged(u32 *currCounts, u32 *prevCounts)
@@ -450,6 +491,20 @@ static bool32 UpdateCommunicationCounts(u32 *groupCounts, u32 *prevGroupCounts, 
         }
     }
 
+#if REVISION >= 0xA
+    if (HaveCountsChanged(groupCountBuffer, prevGroupCounts))
+    {
+        memcpy(groupCounts,     groupCountBuffer, sizeof(groupCountBuffer));
+        memcpy(prevGroupCounts, groupCountBuffer, sizeof(groupCountBuffer));
+
+        groupCounts[GROUPTYPE_TOTAL] = groupCounts[GROUPTYPE_TRADE]
+                                     + groupCounts[GROUPTYPE_BATTLE]
+                                     + groupCounts[GROUPTYPE_UNION]
+                                     + groupCounts[GROUPTYPE_TOTAL];
+        activitiesChanged = TRUE;
+    }
+    return activitiesChanged;
+#else
     if (!HaveCountsChanged(groupCountBuffer, prevGroupCounts))
     {
         if (activitiesChanged == TRUE)
@@ -466,6 +521,8 @@ static bool32 UpdateCommunicationCounts(u32 *groupCounts, u32 *prevGroupCounts, 
                                      + groupCounts[GROUPTYPE_BATTLE]
                                      + groupCounts[GROUPTYPE_UNION]
                                      + groupCounts[GROUPTYPE_TOTAL];
+
         return TRUE;
     }
+#endif
 }

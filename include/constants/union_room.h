@@ -10,6 +10,7 @@
 #define UNION_ROOM_SPAWN_NONE 0
 #define UNION_ROOM_SPAWN_IN   1
 #define UNION_ROOM_SPAWN_OUT  2
+#define UNION_ROOM_SPAWN_OUT_SOON  3 // Equivalent to SPAWN_OUT in revision 10 - probably SPAWN_OUT means disconnected in a "connection reset" way?
 
 #define UNION_ROOM_MAX_LEVEL 30
 

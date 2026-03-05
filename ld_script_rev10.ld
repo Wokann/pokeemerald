@@ -21,7 +21,7 @@ SECTIONS {
     ewram 0x2000000 (NOLOAD) :
     ALIGN(4)
     {
-        INCLUDE "sym_ewram.ld"
+        INCLUDE "sym_ewram_rev10.ld"
         src/*.o(ewram_data);
 
         *libc.a:impure.o(.data);
@@ -33,7 +33,7 @@ SECTIONS {
     ALIGN(4)
     {
         /* .bss starts at 0x3000000 */
-        INCLUDE "sym_bss.ld"
+        INCLUDE "sym_bss_rev10.ld"
         src/*.o(.bss);
         data/*.o(.bss);
 
@@ -41,7 +41,7 @@ SECTIONS {
         src/m4a.o(.bss.code);
 
         /* COMMON starts at 0x30022A8 */
-        INCLUDE "sym_common.ld"
+        INCLUDE "sym_common_rev10.ld"
         src/*.o(COMMON);
         *libc.a:sbrkr.o(COMMON);
     } > IWRAM

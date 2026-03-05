@@ -13,6 +13,7 @@
 #include "gba/flash_internal.h"
 #include "decoration_inventory.h"
 #include "agb_flash.h"
+#include "sloopsvc.h"
 
 static void ApplyNewEncryptionKeyToAllEncryptedData(u32 encryptionKey);
 
@@ -129,6 +130,9 @@ void MoveSaveBlocks_ResetHeap(void)
     encryptionKey = (Random() << 16) + (Random());
     ApplyNewEncryptionKeyToAllEncryptedData(encryptionKey);
     gSaveBlock2Ptr->encryptionKey = encryptionKey;
+#if REVISION >= 0xA
+    svc_SetSaveBlock2(gSaveBlock2Ptr);
+#endif
 }
 
 u32 UseContinueGameWarp(void)

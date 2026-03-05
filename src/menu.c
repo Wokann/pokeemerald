@@ -1218,8 +1218,14 @@ s8 Menu_ProcessInputNoWrapClearOnChoose(void)
 
 void EraseYesNoWindow(void)
 {
+#if REVISION >= 0xA
+    if (sYesNoWindowId == 0xFF) return;
+#endif
     ClearStdWindowAndFrameToTransparent(sYesNoWindowId, TRUE);
     RemoveWindow(sYesNoWindowId);
+#if REVISION >= 0xA
+    sYesNoWindowId = 0xFF;
+#endif
 }
 
 static void PrintMenuActionGridText(u8 windowId, u8 fontId, u8 left, u8 top, u8 width, u8 height, u8 columns, u8 rows, const struct MenuAction *menuActions)
